@@ -308,6 +308,19 @@ pub fn subtract_partial_signature(
 /// };
 /// aggsig.generate_nonce(0);
 /// ```
+///
+/// `Clone` is not implemented as it would share (and
+/// double-free) the underlying aggsig context
+///
+/// ```compile_fail,E0599
+/// use secp256k1zkp::aggsig::AggSigContext;
+/// use secp256k1zkp::{ContextFlag, Secp256k1};
+///
+/// let secp = Secp256k1::with_caps(ContextFlag::Full);
+/// let pks = vec![];
+/// let aggsig = AggSigContext::new(&secp, &pks);
+/// let _copy = aggsig.clone();
+/// ```
 #[derive(Debug)]
 pub struct AggSigContext<'a> {
 	secp: &'a Secp256k1,
