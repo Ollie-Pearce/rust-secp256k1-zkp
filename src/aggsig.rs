@@ -293,22 +293,37 @@ pub fn subtract_partial_signature(
 
 /// Manages an instance of an aggsig multisig context, and provides all methods
 /// to act on that context
+///
+/// The context borrows the `Secp256k1` it was created from, so it cannot
+/// outlive it:
+///
+/// ```compile_fail,E0597
+/// use secp256k1zkp::aggsig::AggSigContext;
+/// use secp256k1zkp::{ContextFlag, Secp256k1};
+///
+/// let pks = vec![];
+/// let aggsig = {
+/// 	let secp = Secp256k1::with_caps(ContextFlag::Full);
+/// 	AggSigContext::new(&secp, &pks)
+/// };
+/// aggsig.generate_nonce(0);
+/// ```
 #[derive(Debug)]
-pub struct AggSigContext {
-	ctx: *mut ffi::Context,
+pub struct AggSigContext<'a> {
+	secp: &'a Secp256k1,
 	aggsig_ctx: *mut ffi::AggSigContext,
 }
 
-impl AggSigContext {
+impl<'a> AggSigContext<'a> {
 	/// Creates new aggsig context with a new random seed
-	pub fn new(secp: &Secp256k1, pubkeys: &Vec<PublicKey>) -> AggSigContext {
+	pub fn new(secp: &'a Secp256k1, pubkeys: &Vec<PublicKey>) -> AggSigContext<'a> {
 		let mut seed = [0u8; 32];
 		thread_rng().fill(&mut seed);
 		let pubkeys: Vec<*const ffi::PublicKey> = pubkeys.into_iter().map(|p| p.as_ptr()).collect();
 		let pubkeys = &pubkeys[..];
 		unsafe {
 			AggSigContext {
-				ctx: secp.ctx,
+				secp,
 				aggsig_ctx: ffi::secp256k1_aggsig_context_create(
 					secp.ctx,
 					pubkeys[0],
@@ -325,7 +340,7 @@ impl AggSigContext {
 	/// In: index: which signature to generate a nonce for
 	pub fn generate_nonce(&self, index: usize) -> bool {
 		let ret =
-			unsafe { ffi::secp256k1_aggsig_generate_nonce(self.ctx, self.aggsig_ctx, index) };
+			unsafe { ffi::secp256k1_aggsig_generate_nonce(self.secp.ctx, self.aggsig_ctx, index) };
 		ret == 1
 	}
 
@@ -344,7 +359,7 @@ impl AggSigContext {
 		let mut retsig = AggSigPartialSignature::from(ffi::AggSigPartialSignature::new());
 		let ret = unsafe {
 			ffi::secp256k1_aggsig_partial_sign(
-				self.ctx,
+				self.secp.ctx,
 				self.aggsig_ctx,
 				retsig.as_mut_ptr(),
 				msg.as_ptr(),
@@ -373,7 +388,7 @@ impl AggSigContext {
 		let partial_sigs = &partial_sigs[..];
 		let ret = unsafe {
 			ffi::secp256k1_aggsig_combine_signatures(
-				self.ctx,
+				self.secp.ctx,
 				self.aggsig_ctx,
 				retsig.as_mut_ptr(),
 				partial_sigs[0],
@@ -398,7 +413,7 @@ impl AggSigContext {
 		let pks = &pks[..];
 		let ret = unsafe {
 			ffi::secp256k1_aggsig_build_scratch_and_verify(
-				self.ctx,
+				self.secp.ctx,
 				sig.as_ptr(),
 				msg.as_ptr(),
 				pks[0],
@@ -409,7 +424,7 @@ impl AggSigContext {
 	}
 }
 
-impl Drop for AggSigContext {
+impl<'a> Drop for AggSigContext<'a> {
 	fn drop(&mut self) {
 		unsafe {
 			ffi::secp256k1_aggsig_context_destroy(self.aggsig_ctx);
