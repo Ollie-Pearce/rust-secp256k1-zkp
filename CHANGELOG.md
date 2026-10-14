@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+### Breaking changes
+
+- `AggSigContext` now borrows its `Secp256k1` (`AggSigContext<'a>`) and no
+  longer implements `Clone`, fixing use-after-free bugs.
+
 ## 0.8.0 (Unreleased)
 
 This release updates `grin_secp256k1zkp` with fixes to buffer initialization,
